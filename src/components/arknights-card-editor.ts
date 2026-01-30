@@ -1,6 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { HomeAssistant, ArknightsCardConfig } from "../types";
+import { HomeAssistant, ArknightsCardConfig, ArknightsAccount, ListAccountsResponse } from "../types";
 
 const fireEvent = (node: HTMLElement, type: string, detail: object) => {
     const event = new Event(type, {
@@ -13,68 +13,43 @@ const fireEvent = (node: HTMLElement, type: string, detail: object) => {
     return event;
 };
 
-interface ArknightsAccount {
-    prefix: string;      // 实体前缀，如 "sensor.8527"
-    name: string;        // 账号名称
-    uid: string;         // UID
-    displayName: string; // 显示名称
-}
-
 @customElement("arknights-card-editor")
 export class ArknightsCardEditor extends LitElement {
     @property({ attribute: false }) public hass!: HomeAssistant;
     @state() private _config!: ArknightsCardConfig;
+    @state() private _accounts: ArknightsAccount[] = [];
+    @state() private _loading = true;
+    @state() private _error: string | null = null;
 
     public setConfig(config: ArknightsCardConfig): void {
         this._config = config;
     }
 
-    /**
-     * 检测所有 Arknights 账号
-     * 通过扫描 sensor.xxx_sanity 或 sensor.xxx_li_zhi 实体来发现账号
-     */
-    private _detectAccounts(): ArknightsAccount[] {
-        if (!this.hass) return [];
-
-        const accounts = new Map<string, ArknightsAccount>();
-
-        for (const entityId of Object.keys(this.hass.states)) {
-            // 匹配理智实体：xxx_sanity 或 xxx_li_zhi
-            const match = entityId.match(/^(sensor\..+?)_(sanity|li_zhi)$/);
-            if (!match) continue;
-
-            const prefix = match[1];
-            if (accounts.has(prefix)) continue;
-
-            // 从 level 实体获取账号名和 UID
-            const levelEntity = this.hass.states[`${prefix}_level`];
-            const name = levelEntity?.attributes?.name || "未知账号";
-            const uid = levelEntity?.attributes?.uid || prefix.replace("sensor.", "");
-
-            accounts.set(prefix, {
-                prefix,
-                name,
-                uid,
-                displayName: `${name} (${uid})`,
-            });
-        }
-
-        return Array.from(accounts.values());
+    protected async firstUpdated(): Promise<void> {
+        await this._loadAccounts();
     }
 
     /**
-     * 获取当前选中的账号前缀
-     * 兼容旧配置（entity）和新配置（account_prefix）
+     * 通过 WebSocket API 加载账号列表
      */
-    private _getCurrentPrefix(): string {
-        if (this._config.account_prefix) {
-            return this._config.account_prefix;
+    private async _loadAccounts(): Promise<void> {
+        if (!this.hass) return;
+
+        this._loading = true;
+        this._error = null;
+
+        try {
+            const response = await this.hass.callWS<ListAccountsResponse>({
+                type: "arknights/list_accounts",
+            });
+            this._accounts = response.accounts || [];
+        } catch (err) {
+            console.error("Failed to load accounts:", err);
+            this._error = "无法加载账号列表，请确认后端集成已配置";
+            this._accounts = [];
+        } finally {
+            this._loading = false;
         }
-        if (this._config.entity) {
-            // 从旧配置的 entity 提取前缀
-            return this._config.entity.replace(/_(sanity|li_zhi)$/, "");
-        }
-        return "";
     }
 
     protected render() {
@@ -82,31 +57,37 @@ export class ArknightsCardEditor extends LitElement {
             return nothing;
         }
 
-        const accounts = this._detectAccounts();
-        const currentPrefix = this._getCurrentPrefix();
+        if (this._loading) {
+            return html`<div class="card-config"><div class="loading">加载账号列表...</div></div>`;
+        }
 
         return html`
             <div class="card-config">
                 <div class="option">
                     <label>选择账号</label>
-                    <select
-                        .value=${currentPrefix}
-                        @change=${this._accountChanged}
-                    >
-                        <option value="" ?selected=${!currentPrefix}>请选择账号</option>
-                        ${accounts.map((account) => html`
-                            <option 
-                                value=${account.prefix} 
-                                ?selected=${currentPrefix === account.prefix}
-                            >
-                                ${account.displayName}
-                            </option>
-                        `)}
-                    </select>
-                    ${accounts.length === 0 ? html`
-                        <div class="hint warning">未检测到明日方舟账号，请确认后端集成已配置</div>
+                    ${this._error ? html`
+                        <div class="error">${this._error}</div>
+                        <button class="retry-btn" @click=${this._loadAccounts}>重试</button>
                     ` : html`
-                        <div class="hint">检测到 ${accounts.length} 个账号</div>
+                        <select
+                            .value=${this._config.uid || ""}
+                            @change=${this._accountChanged}
+                        >
+                            <option value="" ?selected=${!this._config.uid}>请选择账号</option>
+                            ${this._accounts.map((account) => html`
+                                <option 
+                                    value=${account.uid} 
+                                    ?selected=${this._config.uid === account.uid}
+                                >
+                                    ${account.name} (UID: ${account.uid}, Lv.${account.level})
+                                </option>
+                            `)}
+                        </select>
+                        <div class="hint">
+                            ${this._accounts.length > 0
+                    ? `检测到 ${this._accounts.length} 个账号`
+                    : "未检测到账号，请先在后端添加明日方舟账号"}
+                        </div>
                     `}
                 </div>
                 <div class="option">
@@ -116,7 +97,7 @@ export class ArknightsCardEditor extends LitElement {
                         .value=${this._config.name || ""}
                         .configValue=${"name"}
                         @input=${this._valueChanged}
-                        placeholder="留空则使用账号昵称"
+                        placeholder="留空则使用游戏昵称"
                     />
                 </div>
                 <div class="switches">
@@ -147,17 +128,15 @@ export class ArknightsCardEditor extends LitElement {
 
     private _accountChanged(ev: Event): void {
         const target = ev.target as HTMLSelectElement;
-        const newPrefix = target.value;
+        const uid = target.value;
 
-        // 更新配置：使用新的 account_prefix，清除旧的 entity
-        const newConfig = {
+        // 清除旧的配置字段
+        const newConfig: ArknightsCardConfig = {
             ...this._config,
-            account_prefix: newPrefix || undefined,
+            uid: uid || undefined,
         };
-        // 移除旧的 entity 配置（如果使用了新的 account_prefix）
-        if (newPrefix) {
-            delete newConfig.entity;
-        }
+        delete newConfig.entity;
+        delete newConfig.account_prefix;
 
         this._config = newConfig;
         fireEvent(this, "config-changed", { config: this._config });
@@ -219,8 +198,30 @@ export class ArknightsCardEditor extends LitElement {
             font-size: 12px;
             color: var(--secondary-text-color);
         }
-        .hint.warning {
+        .loading {
+            color: var(--secondary-text-color);
+            padding: 16px;
+            text-align: center;
+        }
+        .error {
             color: var(--error-color, #f44336);
+            font-size: 14px;
+            padding: 8px;
+            background: rgba(244, 67, 54, 0.1);
+            border-radius: 4px;
+        }
+        .retry-btn {
+            padding: 8px 16px;
+            border: 1px solid var(--primary-color);
+            border-radius: 4px;
+            background: transparent;
+            color: var(--primary-color);
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .retry-btn:hover {
+            background: var(--primary-color);
+            color: white;
         }
         .switches {
             display: grid;
