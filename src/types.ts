@@ -33,6 +33,8 @@ export interface ArknightsCardConfig {
     show_header?: boolean;
     show_sanity?: boolean;
     show_base?: boolean;
+    show_campaign?: boolean;   // 显示剿灭进度
+    show_routine?: boolean;    // 显示任务进度
     show_sign_button?: boolean;
     // 向后兼容旧配置
     entity?: string;
@@ -76,12 +78,56 @@ export interface BuildingData {
     trading_stock: number;
     manufacture_complete: number;
     drone_current: number;
-    training_state: string;
+    training_state: string;  // "空闲中" | "训练中" | "未建造"
+    clue_board?: Record<string, boolean>;  // 线索板 "1"-"7"
     tired_count?: number;
 }
 
 /**
- * get_account_data 响应
+ * 剿灭作战信息
+ */
+export interface CampaignData {
+    current: number;
+    total: number;  // 通常 1800
+}
+
+/**
+ * 日常/周常任务
+ */
+export interface RoutineData {
+    daily_current: number;
+    daily_total: number;
+    weekly_current: number;
+    weekly_total: number;
+}
+
+/**
+ * 保全派驻信息
+ */
+export interface TowerData {
+    higher_current: number;
+    higher_total: number;
+    lower_current: number;
+    lower_total: number;
+    term_ts: number;
+}
+
+/**
+ * 助战干员
+ */
+export interface AssistChar {
+    char_id: string;
+    skin_id?: string;
+    level: number;
+    evolve_phase: number;  // 0-2
+    potential_rank?: number;  // 0-5
+    skill_id?: string;
+    skill_level?: number;
+    specialize_level?: number;  // 0-3
+}
+
+/**
+ * get_account_data 完整响应
  */
 export interface AccountData {
     uid: string;
@@ -89,39 +135,11 @@ export interface AccountData {
     level: number;
     avatar_url?: string;
     secretary_id?: string;
+    medal_count?: number;
     sanity: SanityData;
     building: BuildingData | null;
-    skin_count?: number;
-    char_count?: number;
-}
-
-// ============ 旧类型（向后兼容） ============
-
-/**
- * 理智属性（旧版实体格式）
- * @deprecated 使用 SanityData 代替
- */
-export interface SanityAttributes {
-    current: number;
-    max: number;
-    minutes_to_full: number;
-    recovery_time: string | null;
-    unit_of_measurement?: string;
-    friendly_name?: string;
-}
-
-/**
- * 基建状态（旧版实体格式）
- * @deprecated 使用 BuildingData 代替
- */
-export interface BaseStatus {
-    trading_stock: number;
-    trading_limit: number;
-    manufacture_complete: number;
-    drone: number;
-    drone_max: number;
-    training_state: string;
-    recruit_finished: number;
-    clue_collected: number;
-    tired_count: number;
+    campaign: CampaignData | null;
+    routine: RoutineData | null;
+    tower: TowerData | null;
+    assist_chars?: AssistChar[];
 }

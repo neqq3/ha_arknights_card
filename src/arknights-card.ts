@@ -160,6 +160,8 @@ export class ArknightsCard extends LitElement {
           ${this._config.show_header ? this._renderHeader() : nothing}
           ${this._config.show_sanity ? this._renderSanity() : nothing}
           ${this._config.show_base ? this._renderBase() : nothing}
+          ${this._config.show_campaign !== false ? this._renderCampaign() : nothing}
+          ${this._config.show_routine !== false ? this._renderRoutine() : nothing}
           ${this._config.show_sign_button ? this._renderSignButton() : nothing}
         </div>
       </ha-card>
@@ -290,6 +292,60 @@ export class ArknightsCard extends LitElement {
             <div class="base-value">${isTraining ? "训练中" : "空闲"}</div>
             <div class="base-label">训练室</div>
           </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * 渲染剿灭进度
+   */
+  private _renderCampaign() {
+    const campaign = this._accountData!.campaign;
+    if (!campaign) return nothing;
+
+    const current = campaign.current || 0;
+    const total = campaign.total || 1800;
+    const percentage = Math.min((current / total) * 100, 100);
+
+    return html`
+      <div class="progress-section">
+        <div class="progress-header">
+          <span class="progress-label">⚔️ 剿灭作战</span>
+          <span class="progress-value">${current} / ${total}</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: ${percentage}%"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * 渲染任务进度
+   */
+  private _renderRoutine() {
+    const routine = this._accountData!.routine;
+    if (!routine) return nothing;
+
+    const dailyPercent = Math.min((routine.daily_current / routine.daily_total) * 100, 100);
+    const weeklyPercent = Math.min((routine.weekly_current / routine.weekly_total) * 100, 100);
+
+    return html`
+      <div class="progress-section">
+        <div class="progress-header">
+          <span class="progress-label">📋 日常任务</span>
+          <span class="progress-value">${routine.daily_current} / ${routine.daily_total}</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: ${dailyPercent}%"></div>
+        </div>
+        <div class="progress-header" style="margin-top: 8px;">
+          <span class="progress-label">📅 周常任务</span>
+          <span class="progress-value">${routine.weekly_current} / ${routine.weekly_total}</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill weekly" style="width: ${weeklyPercent}%"></div>
         </div>
       </div>
     `;

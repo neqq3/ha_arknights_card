@@ -104,7 +104,9 @@ export class ArknightsCardEditor extends LitElement {
                     ${this._renderSwitch("show_header", "显示头部", true)}
                     ${this._renderSwitch("show_sanity", "显示理智", true)}
                     ${this._renderSwitch("show_base", "显示基建", true)}
-                    ${this._renderSwitch("show_sign_button", "显示签到按钮", true)}
+                    ${this._renderSwitch("show_campaign", "显示剿灭", true)}
+                    ${this._renderSwitch("show_routine", "显示任务", true)}
+                    ${this._renderSwitch("show_sign_button", "显示签到", true)}
                 </div>
             </div>
         `;

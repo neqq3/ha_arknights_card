@@ -275,4 +275,73 @@ export const cardStyles = css`
   .loading-pulse {
     animation: pulse 1.5s infinite;
   }
+
+  /* 进度条区域 */
+  .progress-section {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: var(--ak-bg-glass);
+    border-radius: 10px;
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .progress-label {
+    font-size: 0.9em;
+    color: var(--ak-text);
+  }
+
+  .progress-value {
+    font-size: 0.85em;
+    color: var(--ak-text-secondary);
+  }
+
+  .progress-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--ak-primary), #4dd0e1);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .progress-fill.weekly {
+    background: linear-gradient(90deg, var(--ak-secondary), #ffc107);
+  }
+
+  /* 基建不可用 */
+  .base-unavailable {
+    text-align: center;
+    color: var(--ak-text-secondary);
+    padding: 16px;
+    font-size: 0.9em;
+  }
+
+  /* 重试按钮 */
+  .retry-btn {
+    margin-top: 12px;
+    padding: 8px 24px;
+    border: 1px solid var(--ak-primary);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ak-primary);
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: all 0.2s;
+  }
+
+  .retry-btn:hover {
+    background: var(--ak-primary);
+    color: white;
+  }
 `;
