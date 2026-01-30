@@ -1,0 +1,8 @@
+node_modules/
+dist/
+references/
+.DS_Store
+*.log
+.vscode/
+.idea/
+.secrets/

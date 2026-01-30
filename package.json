@@ -1,0 +1,39 @@
+{
+    "name": "ha-arknights-card",
+    "version": "1.0.0",
+    "description": "Home Assistant Lovelace card for Arknights integration",
+    "main": "dist/arknights-card.js",
+    "type": "module",
+    "scripts": {
+        "build": "rollup -c",
+        "watch": "rollup -c -w",
+        "lint": "tsc --noEmit"
+    },
+    "keywords": [
+        "home-assistant",
+        "lovelace",
+        "arknights",
+        "custom-card"
+    ],
+    "author": "neqq3",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/neqq3/ha_arknights_card.git"
+    },
+    "bugs": {
+        "url": "https://github.com/neqq3/ha_arknights_card/issues"
+    },
+    "license": "MIT",
+    "devDependencies": {
+        "@rollup/plugin-node-resolve": "^15.2.3",
+        "@rollup/plugin-terser": "^0.4.4",
+        "@rollup/plugin-typescript": "^11.1.6",
+        "rollup": "^4.9.6",
+        "tslib": "^2.6.2",
+        "typescript": "^5.3.3"
+    },
+    "dependencies": {
+        "home-assistant-js-websocket": "^9.1.0",
+        "lit": "^3.1.2"
+    }
+}
