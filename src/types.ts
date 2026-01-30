@@ -81,6 +81,8 @@ export interface BuildingData {
     training_state: string;  // "空闲中" | "训练中" | "未建造"
     clue_board?: Record<string, boolean>;  // 线索板 "1"-"7"
     tired_count?: number;
+    hire_refresh_count?: number;
+    recruit_finished?: number;
 }
 
 /**

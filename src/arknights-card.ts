@@ -267,6 +267,9 @@ export class ArknightsCard extends LitElement {
     const drone = building.drone_current || 0;
     const trainingState = building.training_state || "空闲";
     const isTraining = trainingState !== "空闲";
+    const hireRefresh = building.hire_refresh_count || 0;
+    const recruitFinished = building.recruit_finished || 0;
+    const clues = building.clue_board || {};
 
     return html`
       <div class="base-section">
@@ -291,6 +294,21 @@ export class ArknightsCard extends LitElement {
             <div class="base-icon">${isTraining ? "📚" : "💤"}</div>
             <div class="base-value">${isTraining ? "训练中" : "空闲"}</div>
             <div class="base-label">训练室</div>
+          </div>
+          <div class="base-item">
+            <div class="base-icon">🎫</div>
+            <div class="base-value">${recruitFinished}<span style="font-size:0.6em;color:var(--ak-text-secondary)">/${hireRefresh}</span></div>
+            <div class="base-label">公招/刷新</div>
+          </div>
+          <div class="base-item clue-item" style="grid-column: span 3;">
+            <div class="clue-board">
+              ${[1, 2, 3, 4, 5, 6, 7].map(i => html`
+                <div class="clue ${clues[i.toString()] ? "active" : ""}">
+                  ${i}
+                </div>
+              `)}
+            </div>
+            <div class="base-label">线索收集</div>
           </div>
         </div>
       </div>

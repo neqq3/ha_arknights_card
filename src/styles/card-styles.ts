@@ -272,6 +272,35 @@ export const cardStyles = css`
     }
   }
 
+  /* 线索板 */
+  .clue-board {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    align-items: center;
+  }
+
+  .clue {
+    width: 20px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7em;
+    color: var(--ak-text-secondary);
+  }
+
+  .clue.active {
+    background: var(--ak-primary);
+    border-color: var(--ak-primary);
+    color: white;
+    box-shadow: 0 0 5px var(--ak-primary);
+  }
+
   .loading-pulse {
     animation: pulse 1.5s infinite;
   }
