@@ -27,12 +27,14 @@ export interface HomeAssistant {
  */
 export interface ArknightsCardConfig {
     type: string;
-    entity?: string;
+    entity?: string;           // 向后兼容：旧配置使用的理智实体
+    account_prefix?: string;   // 新配置：账号实体前缀（如 "sensor.8527"）
     name?: string;
     show_header?: boolean;
     show_sanity?: boolean;
     show_base?: boolean;
     show_sign_button?: boolean;
+    [key: string]: any;
 }
 
 /**

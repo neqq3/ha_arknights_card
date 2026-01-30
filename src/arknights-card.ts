@@ -6,119 +6,217 @@
 import { LitElement, html, nothing, PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { cardStyles } from "./styles/card-styles";
+import "./components/arknights-card-editor";
 import type { HomeAssistant, ArknightsCardConfig, SanityAttributes } from "./types";
 
 // 卡片信息
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.1.0";
 
 console.info(
-    `%c ARKNIGHTS-CARD %c v${CARD_VERSION} `,
-    "color: white; background: #00b4d8; font-weight: bold;",
-    "color: #00b4d8; background: white; font-weight: bold;"
+  `%c ARKNIGHTS-CARD %c v${CARD_VERSION} `,
+  "color: white; background: #00b4d8; font-weight: bold;",
+  "color: #00b4d8; background: white; font-weight: bold;"
 );
 
 @customElement("arknights-card")
 export class ArknightsCard extends LitElement {
-    static styles = cardStyles;
+  static styles = cardStyles;
 
-    @property({ attribute: false }) public hass!: HomeAssistant;
-    @state() private _config!: ArknightsCardConfig;
-    @state() private _signing = false;
-    @state() private _signResult: string | null = null;
+  @property({ attribute: false }) public hass!: HomeAssistant;
+  @state() private _config!: ArknightsCardConfig;
+  @state() private _signing = false;
+  @state() private _signResult: string | null = null;
 
-    /**
-     * 设置卡片配置
-     */
-    public setConfig(config: ArknightsCardConfig): void {
-        if (!config.entity) {
-            throw new Error("请配置 entity 属性");
+  /**
+   * 设置卡片配置
+   * 支持新的 account_prefix 配置和旧的 entity 配置（向后兼容）
+   */
+  public setConfig(config: ArknightsCardConfig): void {
+    if (!config.account_prefix && !config.entity) {
+      throw new Error("请选择一个账号");
+    }
+    this._config = {
+      show_header: true,
+      show_sanity: true,
+      show_base: true,
+      show_sign_button: true,
+      ...config,
+    };
+  }
+
+  /**
+   * 获取卡片默认配置
+   */
+  public static getConfigElement(): HTMLElement {
+    return document.createElement("arknights-card-editor");
+  }
+
+  /**
+   * 获取卡片 Stub 配置
+   */
+  public static getStubConfig(): ArknightsCardConfig {
+    return {
+      type: "custom:arknights-card",
+      entity: "",
+      show_header: true,
+      show_sanity: true,
+      show_base: true,
+      show_sign_button: true,
+    };
+  }
+
+  /**
+   * 获取卡片大小
+   */
+  public getCardSize(): number {
+    return 4;
+  }
+
+  protected shouldUpdate(changedProps: PropertyValues): boolean {
+    if (changedProps.has("_config") || changedProps.has("_signing") || changedProps.has("_signResult")) {
+      return true;
+    }
+
+    // Check if main entity or related entities changed
+    if (changedProps.has("hass") && this._config?.entity) {
+      const oldHass = changedProps.get("hass") as HomeAssistant | undefined;
+      if (oldHass) {
+        // Check main entity
+        if (oldHass.states[this._config.entity] !== this.hass.states[this._config.entity]) {
+          return true;
         }
-        this._config = {
-            show_header: true,
-            show_sanity: true,
-            show_base: true,
-            show_sign_button: true,
-            ...config,
-        };
+      }
+    }
+    return true;
+  }
+
+  /**
+   * 获取账号实体前缀
+   * 支持新配置（account_prefix）和旧配置（entity）
+   */
+  private _getAccountPrefix(): string {
+    if (this._config.account_prefix) {
+      return this._config.account_prefix;
+    }
+    // 向后兼容：从旧的 entity 配置提取前缀
+    if (this._config.entity) {
+      return this._config.entity.replace(/_(sanity|li_zhi)$/, "");
+    }
+    return "";
+  }
+
+  /**
+   * 实体 key 到中文拼音的映射表
+   * 后端使用中文名称，HA 会将其转换为拼音作为实体 ID
+   */
+  private static readonly ENTITY_KEY_MAP: Record<string, string[]> = {
+    // sanity 相关
+    "sanity": ["li_zhi", "sanity"],
+    "sanity_max": ["zui_da_li_zhi", "sanity_max"],
+    "sanity_recovery_time": ["li_zhi_hui_fu_shi_jian", "sanity_recovery_time"],
+    "sanity_minutes_to_full": ["li_zhi_hui_fu_sheng_yu", "sanity_minutes_to_full"],
+    // 玩家信息
+    "level": ["deng_ji", "level"],
+    "char_count": ["gan_yuan_shu_liang", "char_count"],
+    "sanity_status": ["li_zhi_zhuang_tai", "sanity_status"],
+    // 基建
+    "trading_stock": ["mao_yi_zhan_ku_cun", "trading_stock"],
+    "manufacture_complete": ["zhi_zao_zhan_chan_chu", "manufacture_complete"],
+    "drone": ["wu_ren_ji", "drone"],
+    "training_state": ["xun_lian_shi_zhuang_tai", "training_state"],
+    "training_remaining": ["xun_lian_sheng_yu_shi_jian", "training_remaining"],
+    "hire_refresh_count": ["gong_zhao_shua_xin_ci_shu", "hire_refresh_count"],
+    "recruit_finished": ["gong_zhao_wan_cheng_shu", "recruit_finished"],
+    "clue_collected": ["xian_suo_shou_ji", "clue_collected"],
+    "dormitory_rested": ["su_she_xiu_xi_wan_cheng", "dormitory_rested"],
+    "tired_char_count": ["pi_lao_gan_yuan", "tired_char_count"],
+  };
+
+  /**
+   * 获取指定后缀的实体状态
+   * 会尝试多种可能的实体 ID 格式（英文和中文拼音）
+   */
+  private _getRelatedEntityState(suffix: string) {
+    if (!this.hass) return null;
+    const prefix = this._getAccountPrefix();
+    if (!prefix) return null;
+
+    // 获取所有可能的实体 ID 后缀
+    const possibleSuffixes = ArknightsCard.ENTITY_KEY_MAP[suffix] || [suffix];
+
+    // 尝试每种可能的命名
+    for (const s of possibleSuffixes) {
+      const targetId = `${prefix}_${s}`;
+      const state = this.hass.states[targetId];
+      if (state) {
+        return state;
+      }
     }
 
-    /**
-     * 获取卡片默认配置
-     */
-    public static getConfigElement(): HTMLElement {
-        return document.createElement("arknights-card-editor");
+    return null;
+  }
+
+  protected render() {
+    if (!this._config || !this.hass) {
+      return html`<ha-card><div class="loading">加载中...</div></ha-card>`;
     }
 
-    /**
-     * 获取卡片 Stub 配置
-     */
-    public static getStubConfig(): ArknightsCardConfig {
-        return {
-            type: "custom:arknights-card",
-            entity: "sensor.arknights_sanity",
-        };
-    }
-
-    /**
-     * 获取卡片大小
-     */
-    public getCardSize(): number {
-        return 4;
-    }
-
-    protected shouldUpdate(changedProps: PropertyValues): boolean {
-        if (changedProps.has("_config") || changedProps.has("_signing") || changedProps.has("_signResult")) {
-            return true;
-        }
-        if (changedProps.has("hass") && this._config?.entity) {
-            const oldHass = changedProps.get("hass") as HomeAssistant | undefined;
-            if (oldHass) {
-                return oldHass.states[this._config.entity] !== this.hass.states[this._config.entity];
-            }
-        }
-        return true;
-    }
-
-    protected render() {
-        if (!this._config || !this.hass) {
-            return html`<ha-card><div class="loading">加载中...</div></ha-card>`;
-        }
-
-        const entityId = this._config.entity!;
-        const stateObj = this.hass.states[entityId];
-
-        if (!stateObj) {
-            return html`
+    const prefix = this._getAccountPrefix();
+    if (!prefix) {
+      return html`
         <ha-card>
           <div class="card">
-            <div class="error">找不到实体: ${entityId}</div>
+            <div class="error">
+                <div>请选择一个账号</div>
+                <div style="font-size: 0.8em; opacity: 0.8; margin-top: 8px;">在编辑器中选择您的明日方舟账号</div>
+            </div>
           </div>
         </ha-card>
       `;
-        }
+    }
 
-        return html`
+    // 获取理智实体
+    const sanityEntity = this._getRelatedEntityState("sanity") || this._getRelatedEntityState("li_zhi");
+    if (!sanityEntity) {
+      return html`
+        <ha-card>
+          <div class="card">
+            <div class="error">
+                <div>找不到账号数据</div>
+                <div style="font-size: 0.8em; opacity: 0.8; margin-top: 8px;">账号前缀: ${prefix}</div>
+            </div>
+          </div>
+        </ha-card>
+      `;
+    }
+
+    return html`
       <ha-card>
         <div class="card">
           ${this._config.show_header ? this._renderHeader() : nothing}
-          ${this._config.show_sanity ? this._renderSanity(stateObj) : nothing}
+          ${this._config.show_sanity ? this._renderSanity(sanityEntity as any) : nothing}
           ${this._config.show_base ? this._renderBase() : nothing}
           ${this._config.show_sign_button ? this._renderSignButton() : nothing}
         </div>
       </ha-card>
     `;
-    }
+  }
 
-    /**
-     * 渲染头部信息
-     */
-    private _renderHeader() {
-        // 尝试获取玩家信息
-        const levelEntity = this.hass.states["sensor.arknights_level"];
-        const level = levelEntity?.state || "?";
-        const name = this._config.name || levelEntity?.attributes?.friendly_name?.replace(" 等级", "") || "博士";
+  /**
+   * 渲染头部信息
+   */
+  private _renderHeader() {
+    // 尝试获取玩家信息
+    const levelEntity = this._getRelatedEntityState("level");
+    const level = levelEntity?.state || "?";
+    // Use configured name, or friendly name from level entity (usually "Name Level"), or default
+    const name = this._config.name ||
+      levelEntity?.attributes?.name ||
+      levelEntity?.attributes?.nickname ||
+      levelEntity?.attributes?.friendly_name?.replace(" 等级", "") ||
+      "博士";
 
-        return html`
+    return html`
       <div class="header">
         <div class="avatar">
           <svg viewBox="0 0 64 64" width="64" height="64">
@@ -132,34 +230,34 @@ export class ArknightsCard extends LitElement {
         </div>
       </div>
     `;
+  }
+
+  /**
+   * 渲染理智信息
+   */
+  private _renderSanity(stateObj: { state: string; attributes: SanityAttributes }) {
+    const current = parseInt(stateObj.state) || 0;
+    const max = stateObj.attributes?.max || 135;
+    const minutesToFull = stateObj.attributes?.minutes_to_full || 0;
+
+    const percentage = Math.min((current / max) * 100, 100);
+    const circumference = 2 * Math.PI * 32;
+    const offset = circumference - (percentage / 100) * circumference;
+
+    // 格式化恢复时间
+    let recoveryText = "已满";
+    let isFull = current >= max;
+    if (!isFull && minutesToFull > 0) {
+      const hours = Math.floor(minutesToFull / 60);
+      const mins = minutesToFull % 60;
+      if (hours > 0) {
+        recoveryText = `${hours}小时${mins}分钟后回满`;
+      } else {
+        recoveryText = `${mins}分钟后回满`;
+      }
     }
 
-    /**
-     * 渲染理智信息
-     */
-    private _renderSanity(stateObj: { state: string; attributes: SanityAttributes }) {
-        const current = parseInt(stateObj.state) || 0;
-        const max = stateObj.attributes?.max || 135;
-        const minutesToFull = stateObj.attributes?.minutes_to_full || 0;
-
-        const percentage = Math.min((current / max) * 100, 100);
-        const circumference = 2 * Math.PI * 32;
-        const offset = circumference - (percentage / 100) * circumference;
-
-        // 格式化恢复时间
-        let recoveryText = "已满";
-        let isFull = current >= max;
-        if (!isFull && minutesToFull > 0) {
-            const hours = Math.floor(minutesToFull / 60);
-            const mins = minutesToFull % 60;
-            if (hours > 0) {
-                recoveryText = `${hours}小时${mins}分钟后回满`;
-            } else {
-                recoveryText = `${mins}分钟后回满`;
-            }
-        }
-
-        return html`
+    return html`
       <div class="sanity-section">
         <div class="sanity-ring">
           <svg viewBox="0 0 80 80">
@@ -186,35 +284,35 @@ export class ArknightsCard extends LitElement {
         </div>
       </div>
     `;
-    }
+  }
 
-    /**
-     * 渲染基建概览
-     */
-    private _renderBase() {
-        const getState = (suffix: string) => {
-            const entity = this.hass.states[`sensor.arknights_${suffix}`];
-            return entity?.state || "0";
-        };
+  /**
+   * 渲染基建概览
+   */
+  private _renderBase() {
+    const getState = (suffix: string) => {
+      const entity = this._getRelatedEntityState(suffix);
+      return entity?.state || "0";
+    };
 
-        const getAttr = (suffix: string, attr: string) => {
-            const entity = this.hass.states[`sensor.arknights_${suffix}`];
-            return entity?.attributes?.[attr];
-        };
+    const getAttr = (suffix: string, attr: string) => {
+      const entity = this._getRelatedEntityState(suffix);
+      return entity?.attributes?.[attr];
+    };
 
-        const tradingStock = parseInt(getState("trading_stock")) || 0;
-        const tradingLimit = getAttr("trading_stock", "limit") || 9;
-        const isTradeWarning = tradingStock >= tradingLimit;
+    const tradingStock = parseInt(getState("trading_stock")) || 0;
+    const tradingLimit = getAttr("trading_stock", "limit") || 9;
+    const isTradeWarning = tradingStock >= tradingLimit;
 
-        const manufactureComplete = parseInt(getState("manufacture_complete")) || 0;
-        const drone = parseInt(getState("drone")) || 0;
-        const droneMax = getAttr("drone", "max") || 200;
-        const isDroneWarning = drone >= droneMax * 0.9;
+    const manufactureComplete = parseInt(getState("manufacture_complete")) || 0;
+    const drone = parseInt(getState("drone")) || 0;
+    const droneMax = getAttr("drone", "max") || 200;
+    const isDroneWarning = drone >= droneMax * 0.9;
 
-        const trainingState = getState("training_state");
-        const isTraining = trainingState !== "空闲" && trainingState !== "0";
+    const trainingState = getState("training_state");
+    const isTraining = trainingState !== "空闲" && trainingState !== "0";
 
-        return html`
+    return html`
       <div class="base-section">
         <div class="section-title">基建概览</div>
         <div class="base-grid">
@@ -241,67 +339,67 @@ export class ArknightsCard extends LitElement {
         </div>
       </div>
     `;
-    }
+  }
 
-    /**
-     * 渲染签到按钮
-     */
-    private _renderSignButton() {
-        return html`
+  /**
+   * 渲染签到按钮
+   */
+  private _renderSignButton() {
+    return html`
       <button
         class="sign-button ${this._signResult?.includes("成功") ? "success" : ""}"
         @click=${this._handleSign}
         ?disabled=${this._signing}
       >
         ${this._signing
-                ? html`<span class="loading-pulse">签到中...</span>`
-                : this._signResult
-                    ? this._signResult
-                    : html`<span>📝</span> 森空岛签到`}
+        ? html`<span class="loading-pulse">签到中...</span>`
+        : this._signResult
+          ? this._signResult
+          : html`<span>📝</span> 森空岛签到`}
       </button>
     `;
-    }
+  }
 
-    /**
-     * 处理签到
-     */
-    private async _handleSign() {
-        if (this._signing) return;
+  /**
+   * 处理签到
+   */
+  private async _handleSign() {
+    if (this._signing) return;
 
-        this._signing = true;
+    this._signing = true;
+    this._signResult = null;
+
+    try {
+      await this.hass.callService("arknights", "sign", {});
+      this._signResult = "✓ 签到成功";
+    } catch (error) {
+      console.error("签到失败:", error);
+      this._signResult = "签到失败";
+    } finally {
+      this._signing = false;
+      // 3秒后重置按钮状态
+      setTimeout(() => {
         this._signResult = null;
-
-        try {
-            await this.hass.callService("arknights", "sign", {});
-            this._signResult = "✓ 签到成功";
-        } catch (error) {
-            console.error("签到失败:", error);
-            this._signResult = "签到失败";
-        } finally {
-            this._signing = false;
-            // 3秒后重置按钮状态
-            setTimeout(() => {
-                this._signResult = null;
-                this.requestUpdate();
-            }, 3000);
-        }
+        this.requestUpdate();
+      }, 3000);
     }
+  }
 }
 
 // 注册卡片到 window
 declare global {
-    interface HTMLElementTagNameMap {
-        "arknights-card": ArknightsCard;
-    }
-    interface Window {
-        customCards?: Array<{ type: string; name: string; description: string }>;
-    }
+  interface HTMLElementTagNameMap {
+    "arknights-card": ArknightsCard;
+  }
+  interface Window {
+    customCards?: Array<{ type: string; name: string; description: string }>;
+  }
 }
 
 // 注册到 Home Assistant 自定义卡片列表
 window.customCards = window.customCards || [];
 window.customCards.push({
-    type: "arknights-card",
-    name: "Arknights Card",
-    description: "明日方舟理智与基建状态卡片",
+  type: "arknights-card",
+  name: "Arknights Card",
+  description: "明日方舟理智与基建状态卡片",
 });
